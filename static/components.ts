@@ -59,6 +59,7 @@ import {
     OPT_PIPELINE_VIEW_COMPONENT_NAME,
     OPT_VIEW_COMPONENT_NAME,
     OUTPUT_COMPONENT_NAME,
+    PDF_VIEW_COMPONENT_NAME,
     PP_VIEW_COMPONENT_NAME,
     RUST_HIR_VIEW_COMPONENT_NAME,
     RUST_MACRO_EXP_VIEW_COMPONENT_NAME,
@@ -310,7 +311,13 @@ export function getDiffView(): ComponentConfig<typeof DIFF_VIEW_COMPONENT_NAME> 
         componentState: {},
     };
 }
-
+export function getPDFView(): ComponentConfig<typeof PDF_VIEW_COMPONENT_NAME> {
+    return {
+        type: 'component',
+        componentName: PDF_VIEW_COMPONENT_NAME,
+        componentState: {},
+    };
+}
 /**
  * Get a diff component with the given configuration.
  *

@@ -1,0 +1,12 @@
+#pdf-show-anda
+  .top-bar.btn-toolbar.options-toolbar.bg-light(role="toolbar")
+    include ../../font-size
+    .btn-group.btn-group-sm(role="group")
+      //- Puedes agregar un botón de descarga si lo deseas
+      button.btn.btn-sm.btn-light.download-pdf(type="button" title="Download PDF")
+        span.fas.fa-download
+        span.hideable Download
+
+  //- Este es el contenedor clave que el TS buscará mediante 'this.contentRoot'
+  .content.output-content(role="document" aria-label="PDF Viewer" style="overflow: hidden; padding: 0; width: 100%; height: 100%;")
+    //- Se deja vacío para que el Constructor del .ts inyecte el <iframe> aquí

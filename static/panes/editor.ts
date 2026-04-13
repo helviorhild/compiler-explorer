@@ -429,6 +429,21 @@ export class Editor extends MonacoPane<monaco.editor.IStandaloneCodeEditor, Edit
             this.clearLinkedLine();
             const pos = e.target.position;
             this.tryPanesLinkLine(pos.lineNumber, pos.column, false);
+            //     console.log(pos.toString());
+            const source = this.getSource();
+            if (!source) return;
+            const line = source.split('\n')[pos.lineNumber - 1];
+            // const match = line.match(/@doc:([a-z0-9]+):([A-Z0-9_]+):(\d+)/);
+            const match = line.match(/@doc:(.*?):([A-Z0-9_]+):(\d+)/);
+            if (match) {
+                const arch = match[1];
+                const keyword = match[2];
+                const page = parseInt(match[3]);
+                console.log('abrir PDF:', arch, keyword, page);
+                this.eventHub.emit('openPdf', arch, keyword, page);
+                // 👉 acá conectás con tu visor
+                // abrirPdfEnPagina(page);
+            }
         }
     }
 

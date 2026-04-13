@@ -52,6 +52,7 @@ import {
     OPT_PIPELINE_VIEW_COMPONENT_NAME,
     OPT_VIEW_COMPONENT_NAME,
     OUTPUT_COMPONENT_NAME,
+    PDF_VIEW_COMPONENT_NAME,
     PP_VIEW_COMPONENT_NAME,
     RUST_HIR_VIEW_COMPONENT_NAME,
     RUST_MACRO_EXP_VIEW_COMPONENT_NAME,
@@ -87,6 +88,7 @@ import {Ir as IrView} from './panes/ir-view.js';
 import {OptPipeline} from './panes/opt-pipeline.js';
 import {Opt as OptView} from './panes/opt-view.js';
 import {Output} from './panes/output.js';
+import {PDFPane} from './panes/pdf-pane';
 import {PP as PreProcessorView} from './panes/pp-view.js';
 import {RustHir as RustHirView} from './panes/rusthir-view.js';
 import {RustMacroExp as RustMacroExpView} from './panes/rustmacroexp-view.js';
@@ -148,6 +150,8 @@ export class Hub {
         layout.registerComponent(IR_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.irViewFactory(c, s));
         layout.registerComponent(CLANGIR_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.clangirViewFactory(c, s));
         layout.registerComponent(OPT_PIPELINE_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.optPipelineFactory(c, s));
+        this.layout.registerComponent(PDF_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.pdfViewFactory(c, s));
+
         // Historical LLVM-specific name preserved to keep old links working
         layout.registerComponent(LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME, (c: GLC, s: any) =>
             this.optPipelineFactory(c, s),
@@ -445,6 +449,11 @@ export class Hub {
     }
 
     // Component Factories
+    private pdfViewFactory(container: GLC, state: any): PDFPane {
+        console.warn('PDF view is currently experimental and may not work as expected');
+        // Si aún no has creado la clase PDFPane, puedes usar un Pane genérico temporalmente
+        return new PDFPane(this, container, state);
+    }
 
     private codeEditorFactory(container: GoldenLayout.Container, state: InferComponentState<Editor>): Editor {
         // Ensure editors are closable: some older versions had 'isClosable' false.

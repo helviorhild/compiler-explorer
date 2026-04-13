@@ -184,4 +184,5 @@ export type EventMap = {
     treeOpen: (treeId: number) => void;
     printrequest: () => void;
     printdata: (data: string) => void;
+    openPdf: (arch: string, keyword: string, page: number) => void;
 };

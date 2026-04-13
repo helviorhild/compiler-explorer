@@ -709,6 +709,10 @@ function start() {
     setupAdd($('#add-diff'), () => {
         return Components.getDiffView();
     });
+    setupAdd($('#add-pdf'), () => {
+        return Components.getPDFView();
+    });
+
     setupAdd($('#add-tree'), () => {
         $('#add-tree').prop('disabled', true);
         return Components.getTree();

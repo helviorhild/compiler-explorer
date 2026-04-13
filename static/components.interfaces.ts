@@ -79,7 +79,7 @@ export const CLOJURE_MACRO_EXP_VIEW_COMPONENT_NAME = 'clojuremacroexp' as const;
 export const DEVICE_VIEW_COMPONENT_NAME = 'device' as const;
 export const EXPLAIN_VIEW_COMPONENT_NAME = 'explain' as const;
 export const YUL_VIEW_COMPONENT_NAME = 'yul' as const;
-
+export const PDF_VIEW_COMPONENT_NAME = 'PDFView' as const;
 export type StateWithLanguage = {lang: string};
 // TODO(#7808): Normalize state types to reduce duplication (see #4490)
 export type StateWithEditor = {source: string | number};
@@ -403,6 +403,7 @@ export interface ComponentStateMap {
     [DEVICE_VIEW_COMPONENT_NAME]: EmptyDeviceViewState | PopulatedDeviceViewState;
     [EXPLAIN_VIEW_COMPONENT_NAME]: EmptyExplainViewState | PopulatedExplainViewState;
     [YUL_VIEW_COMPONENT_NAME]: EmptyYulViewState | PopulatedYulViewState;
+    [PDF_VIEW_COMPONENT_NAME]: EmptyState; // PDF view is currently experimental and has no state defined yet
 }
 
 /**

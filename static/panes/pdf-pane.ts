@@ -1,0 +1,493 @@
+// Copyright (c) 2022, Compiler Explorer Authors
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+//     * Redistributions of source code must retain the above copyright notice,
+//       this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+
+import {Container} from 'golden-layout';
+import $ from 'jquery';
+import * as monaco from 'monaco-editor';
+import _ from 'underscore';
+
+import {escapeHTML} from '../../shared/common-utils.js';
+import {CompilationResult} from '../../types/compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../../types/compiler.interfaces.js';
+import {Fix} from '../../types/resultline/resultline.interfaces.js';
+import * as AnsiToHtml from '../ansi-to-html.js';
+import {Hub} from '../hub.js';
+import {updateAndCalcTopBarHeight} from '../utils.js';
+import {FontScale} from '../widgets/fontscale.js';
+import {Toggles} from '../widgets/toggles.js';
+import {OutputState} from './output.interfaces.js';
+import {PaneState} from './pane.interfaces.js';
+import {Pane} from './pane.js';
+
+function makeAnsiToHtml(color?: string) {
+    return new AnsiToHtml.Filter({
+        fg: color ? color : '#333',
+        bg: '#f5f5f5',
+        stream: true,
+        escapeXML: true,
+    });
+}
+
+export class PDFPane extends Pane<OutputState> {
+    contentRoot: JQuery<HTMLElement>;
+    optionsToolbar: JQuery<HTMLElement>;
+    fontScale: FontScale;
+    wrapButton: JQuery<HTMLElement>;
+    selectAllButton: JQuery;
+    normalAnsiToHtml: AnsiToHtml.Filter;
+    errorAnsiToHtml: AnsiToHtml.Filter;
+    wrapTitle: string;
+    options: Toggles;
+    pdfUrl: string;
+    clickCallback: (e: JQuery.ClickEvent) => void;
+
+    keydownCallback: (e: JQuery.KeyDownEvent) => void;
+
+    private isOutputCurrentSelection = false;
+
+    constructor(hub: Hub, container: Container, state: OutputState & PaneState) {
+        // canonicalize state
+        if ((state as any).compiler) state.id = (state as any).compiler;
+        if ((state as any).editor) state.editorid = (state as any).editor;
+        if ((state as any).tree) state.treeid = (state as any).tree;
+        super(hub, container, state);
+        this.hub = hub;
+        this.contentRoot = this.domRoot.find('.content');
+        this.optionsToolbar = this.domRoot.find('.options-toolbar');
+        this.fontScale = new FontScale(this.domRoot, state, '.content');
+        this.fontScale.on('change', this.updateState.bind(this));
+        this.normalAnsiToHtml = makeAnsiToHtml();
+        this.errorAnsiToHtml = makeAnsiToHtml('var(--terminal-red)');
+        this.eventHub.emit('outputOpened', this.compilerInfo.compilerId);
+        this.eventHub.on('printrequest', this.sendPrintData, this);
+        this.onOptionsChange();
+
+        ///INYECTAR PDF VIEWER AQUI
+
+        // 1. Obtener la ruta del PDF del estado (inyectada al crear la ventana)
+        this.pdfUrl = (state as any).pdfUrl || '';
+
+        // 2. Escalar fuente (opcional, pero CE lo requiere para la consistencia del UI)
+        this.fontScale = new FontScale(this.domRoot, state, '.content');
+
+        // 3. Renderizado inmediato
+        if (this.pdfUrl) {
+            this.renderPDF(this.pdfUrl, 1);
+        }
+        this.eventHub.on('openPdf', (arch, keyword, page) => {
+            // this.setPage(page);
+            console.log('Received request to open PDF page:', arch, keyword, page);
+            // Aquí podrías actualizar la URL del PDF o cargar un PDF diferente según el valor de "page"
+            //this.renderPDF(arch, page);
+            this.renderPDF(arch, page);
+        });
+        this.eventHub.emit('outputOpened', this.compilerInfo.compilerId);
+    }
+
+    private renderPDF(url: string, page: number) {
+        const iframe = $('#pdf-frame');
+
+        if (!iframe.length) {
+            console.error('iframe no encontrado');
+            return;
+        }
+
+        const newSrc = `${url}#page=${page}&t=${Date.now()}`;
+
+        iframe.attr('src', newSrc);
+
+        console.log('nuevo src:', newSrc);
+    }
+
+    ///FIN INYECTAR PDF VIEWER AQUI
+
+    private onClickCallback(e: JQuery.ClickEvent) {
+        //this.isOutputCurrentSelection = this.contentRoot[0].contains(e.target);
+        console.log(this.contentRoot.toString());
+        //console.dir(this.contentRoot.position());
+
+        //  const target = e.target as HTMLElement;
+
+        //console.log("clicked element:", target);
+        // console.log(this.contentRoot[0].contains(e.target));
+    }
+
+    private onKeydownCallback(e: JQuery.KeyDownEvent) {
+        if (this.isOutputCurrentSelection && e.ctrlKey && e.key === 'a') {
+            e.preventDefault();
+            this.selectAll();
+        }
+    }
+
+    private selectAll() {
+        const range = document.createRange();
+        range.selectNode(this.contentRoot[0]);
+        const selection = window.getSelection();
+        if (selection !== null) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    }
+
+    override getInitialHTML(): string {
+        const pdfUrl =
+            'https://ww1.microchip.com/downloads/aemDocuments/documents/MCU08/ProductDocuments/DataSheets/35007C.pdf';
+        const template = $('#pdf-show').html() || '';
+
+        const iframeHtml = `
+        <iframe id="pdf-frame" src="${pdfUrl}" width="100%" height="100%" style="border: none;">HOLA MUNDO</iframe>
+    `;
+
+        // Reemplazamos el texto marcador por el iframe real
+        //  return template.replace('INSERT_PDF_HERE', iframeHtml);
+        return template + iframeHtml; // Si el marcador no existe, simplemente añadimos el iframe al final
+    }
+
+    /*    
+    override getInitialHTML(): string {
+        return $('#pdf-show').html();
+    }
+
+override getInitialHTML(): string {
+    // URL estática de Microchip (ejemplo: un datasheet)
+    const pdfUrl = "https://ww1.microchip.com/downloads/aemDocuments/documents/MCU08/ProductDocuments/DataSheets/35007C.pdf";
+    
+    // 1. Obtenemos el HTML base definido en tu .pug (la barra de herramientas)
+    // Usamos find() sobre el contenedor del componente para evitar errores de 'undefined'
+    const baseHtml = $('#pdf-show').html() || "";
+
+    // 2. Definimos el iframe que se inyectará en el contenedor .content.output-content
+    const iframeHtml = `
+    <!-- Se deja vacío --> <!-- Este comentario es un marcador para inyectar el iframe -->
+    <DIV style="position: relative; width: 100%; height: 100%;">
+    HOLA MUNDO DESDE PDF PANE    
+    <iframe 
+            src="${pdfUrl}" 
+            width="100%" 
+            height="100%" 
+            style="border: none; min-height: 500px;">
+            <p>Tu navegador no soporta PDFs. <a href="${pdfUrl}">Descárgalo aquí</a>.</p>
+        </iframe>
+        </div>
+    `;
+
+    // 3. Concatenamos: La estructura de Pug + el iframe dentro del div correspondiente
+    // Reemplazamos el comentario del pug por el iframe real
+    return baseHtml.replace('<!-- Se deja vacío -->', iframeHtml) || (baseHtml + iframeHtml);
+}
+
+*/
+
+    override registerButtons(state: OutputState & PaneState) {
+        this.wrapButton = this.domRoot.find('.wrap-lines');
+        this.selectAllButton = this.domRoot.find('.select-all');
+        this.wrapTitle = this.wrapButton.prop('title');
+        // TODO: Would be nice to be able to get rid of this cast
+        this.options = new Toggles(this.domRoot.find('.options'), state as unknown as Record<string, boolean>);
+    }
+
+    override registerCallbacks() {
+        this.options.on('change', this.onOptionsChange.bind(this));
+        this.eventHub.on('compiling', this.onCompiling, this);
+        this.selectAllButton.on('click', this.onSelectAllButton.bind(this));
+
+        this.clickCallback = e => {
+            this.onClickCallback(e);
+        };
+
+        this.keydownCallback = e => {
+            this.onKeydownCallback(e);
+        };
+
+        $(document).on('click', this.clickCallback);
+        // domRoot is not sufficient here
+        $(document).on('keydown', this.keydownCallback);
+    }
+
+    onOptionsChange() {
+        const options = this.getEffectiveOptions();
+        this.contentRoot.toggleClass('wrap', options.wrap);
+        this.wrapButton.prop('title', '[' + (options.wrap ? 'ON' : 'OFF') + '] ' + this.wrapTitle);
+        this.updateState();
+    }
+
+    getEffectiveOptions() {
+        return this.options.get();
+    }
+
+    override resize() {
+        const rootHeight = this.domRoot.height();
+        const toolbarHeight = updateAndCalcTopBarHeight(this.domRoot, this.optionsToolbar, this.hideable);
+        if (rootHeight && toolbarHeight) {
+            this.contentRoot.height(rootHeight - toolbarHeight - 5);
+        }
+    }
+
+    override getCurrentState() {
+        const parent = super.getCurrentState();
+        const state = {
+            ...this.getEffectiveOptions(),
+            ...parent,
+        };
+        this.fontScale.addState(state);
+        return state as any;
+    }
+
+    addOutputLines(result: CompilationResult) {
+        // When MS upgrade to a server version later than Nov 11, 2022 (the merge of PR #4278)
+        // the `undefined` check can be removed.
+        const stdout = (result.stdout as any) !== undefined ? result.stdout : [];
+        const stderr = result.stderr;
+        for (const obj of stdout.concat(stderr)) {
+            const lineNumber = obj.tag ? obj.tag.line : obj.line;
+            const columnNumber = obj.tag ? obj.tag.column : -1;
+            if (obj.text === '') {
+                this.add('<br/>');
+            } else {
+                this.add(
+                    this.normalAnsiToHtml.toHtml(obj.text),
+                    lineNumber,
+                    columnNumber,
+                    obj.tag?.file,
+                    obj.tag?.fixes,
+                );
+            }
+        }
+    }
+
+    onCompiling(compilerId: number) {
+        if (this.compilerInfo.compilerId === compilerId) {
+            this.setCompileStatus(true);
+        }
+    }
+
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult) {
+        if (compilerId !== this.compilerInfo.compilerId) return;
+        this.compilerInfo.compilerName = compiler.name;
+
+        this.contentRoot.empty();
+
+        // reset stream colors
+        this.normalAnsiToHtml.reset();
+        this.errorAnsiToHtml.reset();
+
+        if (result.buildsteps) {
+            for (const step of result.buildsteps) {
+                this.add('Step ' + step.step + ' returned: ' + step.code);
+                this.addOutputLines(step);
+            }
+        } else {
+            this.addOutputLines(result);
+            if (!result.execResult) {
+                this.add('Compiler returned: ' + result.code);
+            } else {
+                this.add('ASM generation compiler returned: ' + result.code);
+                if (result.execResult.buildResult) {
+                    this.addOutputLines(result.execResult.buildResult);
+                    this.add('Execution build compiler returned: ' + result.execResult.buildResult.code);
+                }
+            }
+        }
+
+        if (result.execResult) {
+            if (result.execResult.didExecute || result.didExecute) {
+                this.add('Program returned: ' + result.execResult.code);
+            }
+
+            if (result.execResult.stderr.length || result.execResult.stdout.length) {
+                for (const obj of result.execResult.stderr) {
+                    // Conserve empty lines as they are discarded by ansiToHtml
+                    if (obj.text === '') {
+                        this.programOutput('<br/>');
+                    } else {
+                        this.programOutput(this.errorAnsiToHtml.toHtml(obj.text), 'var(--terminal-red)');
+                    }
+                }
+
+                for (const obj of result.execResult.stdout) {
+                    // Conserve empty lines as they are discarded by ansiToHtml
+                    if (obj.text === '') {
+                        this.programOutput('<br/>');
+                    } else {
+                        this.programOutput(this.normalAnsiToHtml.toHtml(obj.text));
+                    }
+                }
+            }
+        }
+        this.setCompileStatus(false);
+        this.updateTitle();
+    }
+
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId: number,
+        treeId: number,
+    ) {}
+
+    programOutput(msg: string, color?: string) {
+        const elem = $('<div/>').appendTo(this.contentRoot).html(msg).addClass('program-exec-output');
+
+        if (color) elem.css('color', color);
+    }
+
+    getEditorIdByFilename(filename: string) {
+        if (this.compilerInfo.treeId) {
+            const tree = this.hub.getTreeById(this.compilerInfo.treeId);
+            if (tree) {
+                return tree.multifileService.getEditorIdByFilename(filename);
+            }
+            return false;
+        }
+    }
+
+    emitEditorLinkLine(lineNum: number, column: number, filename: string, goto: boolean) {
+        if (this.compilerInfo.editorId) {
+            this.eventHub.emit('editorLinkLine', this.compilerInfo.editorId, lineNum, column, column + 1, goto);
+        } else if (filename) {
+            const editorId = this.getEditorIdByFilename(filename);
+            if (editorId) {
+                this.eventHub.emit('editorLinkLine', editorId, lineNum, column, column + 1, goto);
+            }
+        }
+    }
+
+    emitEditorApplyQuickfix(filename: string, range: monaco.IRange, text: string | null): void {
+        if (this.compilerInfo.editorId) {
+            this.eventHub.emit('editorApplyQuickfix', this.compilerInfo.editorId, range, text);
+        } else if (filename) {
+            const editorId = this.getEditorIdByFilename(filename);
+            if (editorId) {
+                this.eventHub.emit('editorApplyQuickfix', editorId, range, text);
+            }
+        }
+    }
+
+    add(msg: string, lineNum?: number, column?: number, filename?: string, fixes?: Fix[]) {
+        const elem = $('<div/>').appendTo(this.contentRoot);
+        if (lineNum && column && filename) {
+            elem.empty();
+            const span = $('<span class="linked-compiler-output-line"></span>')
+                .html(msg)
+                .on('click', e => {
+                    if (this.hasActiveSelection()) {
+                        return;
+                    }
+                    this.emitEditorLinkLine(lineNum, column, filename, true);
+                    // do not bring user to the top of index.html
+                    // http://stackoverflow.com/questions/3252730
+                    e.preventDefault();
+                    return false;
+                })
+                .on('mouseover', () => {
+                    this.emitEditorLinkLine(lineNum, column, filename, false);
+                })
+                .on('click', '.diagnostic-url', e => {
+                    e.stopPropagation();
+                });
+
+            if (fixes) {
+                this.addQuickfixHandlers(span, msg, fixes, filename);
+            }
+
+            span.appendTo(elem);
+        } else {
+            elem.html(msg);
+        }
+    }
+
+    private addQuickfixHandlers(span: JQuery<HTMLElement>, msg: string, fixes: Fix[], filename: string): void {
+        if (fixes.length === 0) {
+            return;
+        }
+
+        span.attr('title', fixes[0].title).addClass('quickfix-action');
+        for (const fix of fixes) {
+            span.on('click', e => {
+                if (this.hasActiveSelection()) {
+                    return;
+                }
+                for (const {text, line, endline, column, endcolumn} of fix.edits) {
+                    if (line && endline && column && endcolumn) {
+                        this.emitEditorApplyQuickfix(
+                            filename,
+                            {
+                                startLineNumber: line,
+                                startColumn: column,
+                                endLineNumber: endline,
+                                endColumn: endcolumn,
+                            },
+                            text,
+                        );
+                    }
+                }
+                $(e.delegateTarget).replaceWith($('<span></span>').html(msg));
+                return false;
+            });
+        }
+    }
+
+    override getDefaultPaneName() {
+        return `Output of ${this.compilerInfo.compilerName}`;
+    }
+
+    override getPaneTag() {
+        return `(Compiler #${this.compilerInfo.compilerId})`;
+    }
+
+    override onCompilerClose(id: number) {
+        if (id === this.compilerInfo.compilerId) {
+            // We can't immediately close as an outer loop somewhere in GoldenLayout is iterating over
+            // the hierarchy. We can't modify while it's being iterated over.
+            this.close();
+            _.defer(() => {
+                this.container.close();
+            });
+        }
+    }
+
+    override close() {
+        this.eventHub.emit('outputClosed', this.compilerInfo.compilerId);
+        this.eventHub.unsubscribe();
+        $(document).off('click', this.clickCallback);
+        $(document).off('keydown', this.keydownCallback);
+    }
+
+    setCompileStatus(isCompiling: boolean) {
+        this.contentRoot.toggleClass('compiling', isCompiling);
+    }
+
+    private onSelectAllButton(unused: JQuery.ClickEvent) {
+        this.selectAll();
+    }
+
+    protected sendPrintData() {
+        this.eventHub.emit(
+            'printdata',
+
+            `<h1>Output Pane: ${escapeHTML(this.getPaneName())}</h1>` + `<code>${this.contentRoot.html()}</code>`,
+        );
+    }
+}
