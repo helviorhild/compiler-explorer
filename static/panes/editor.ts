@@ -434,7 +434,9 @@ export class Editor extends MonacoPane<monaco.editor.IStandaloneCodeEditor, Edit
             if (!source) return;
             const line = source.split('\n')[pos.lineNumber - 1];
             // const match = line.match(/@doc:([a-z0-9]+):([A-Z0-9_]+):(\d+)/);
-            const match = line.match(/@doc:(.*?):([A-Z0-9_]+):(\d+)/);
+            //const match = line.match(/@doc:(.*?):([A-Z0-9_]+):(\d+)/);
+            // const match = line.match(/@doc:(.*?):([A-Z0-9_]+):(\d+)/i);
+            const match = line.match(/@doc:(.*?):([A-Z0-9_\-\s]+):(\d+)/i);
             if (match) {
                 const arch = match[1];
                 const keyword = match[2];

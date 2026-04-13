@@ -100,12 +100,12 @@ export class PDFPane extends Pane<OutputState> {
             console.log('Received request to open PDF page:', arch, keyword, page);
             // Aquí podrías actualizar la URL del PDF o cargar un PDF diferente según el valor de "page"
             //this.renderPDF(arch, page);
-            this.renderPDF(arch, page);
+            this.renderPDF(arch, page, keyword);
         });
         this.eventHub.emit('outputOpened', this.compilerInfo.compilerId);
     }
 
-    private renderPDF(url: string, page: number) {
+    private renderPDF(url: string, page: number, p_clave: string = '') {
         const iframe = $('#pdf-frame');
 
         if (!iframe.length) {
@@ -113,7 +113,7 @@ export class PDFPane extends Pane<OutputState> {
             return;
         }
 
-        const newSrc = `${url}#page=${page}&t=${Date.now()}`;
+        const newSrc = `${url}#page=${page}&search=${p_clave}&t=${Date.now()}`;
 
         iframe.attr('src', newSrc);
 
